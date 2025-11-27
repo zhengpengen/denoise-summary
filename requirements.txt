@@ -1,0 +1,9 @@
+torch
+hydra-core
+omegaconf
+tqdm
+nltk
+sentence-transformers
+datasets
+rouge-score
+lightning

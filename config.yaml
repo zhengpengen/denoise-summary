@@ -1,0 +1,52 @@
+defaults:
+  - _self_
+
+seed: 42
+
+# --- Data Loading ---
+loader:
+  batch_size: 32
+  eval_batch_size: 32
+  num_workers: 4
+  pin_memory: True
+
+# --- Model Architecture ---
+model:
+  # Embedding dimension for sentences and the model's hidden size
+  dim: 384
+  # Transformer parameters
+  num_layers: 6
+  num_heads: 6
+
+# --- Task-specific Settings ---
+summarization:
+  # Model from sentence-transformers to embed sentences
+  sentence_embedder_name_or_path: 'all-MiniLM-L6-v2'
+  # Max sentences per document. Documents with more will be truncated.
+  max_sentences: 100
+
+# --- Diffusion Process ---
+diffusion:
+  # Number of noising steps
+  timesteps: 1000
+  # Noise schedule parameters
+  beta_start: 0.0001
+  beta_end: 0.02
+
+# --- Optimizer ---
+optim:
+  weight_decay: 0
+  lr: 3e-4
+
+# --- Trainer Settings ---
+trainer:
+  gradient_clip_val: 1.0
+  # Total training steps. Number of epochs will be calculated from this.
+  max_steps: 200000
+
+# --- Hydra Settings ---
+hydra:
+  run:
+    dir: ./outputs/cnn_dailymail/${now:%Y.%m.%d}/${now:%H%M%S}
+  job:
+    chdir: true
