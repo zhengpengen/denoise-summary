@@ -89,4 +89,4 @@ You can edit the `article_text` variable inside `generate_summary.py` to summari
 
 
 
-I do not have experience writing and training diffusion models. i want to train a discrete diffusion denoising model for extractive summarization (where summary is constructed as selecting sentences from the source article), where the clean data is the summary, and the noisy data is the source text, and the sentences not in the extractive summary are the "noise". How would I approach this, both idea wise and code wise? I have went ahead and made some changed to dataloader.
+I do not have experience writing and training diffusion models. i want to train a discrete diffusion denoising model for extractive summarization (where summary is constructed as selecting sentences from the source article), where the clean data is the summary, and the noisy data is the source text, and the sentences not in the extractive summary are the "noise". How much ram and vram is needed to train this? 
