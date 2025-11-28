@@ -143,8 +143,8 @@ def train(config: DictConfig):
     timesteps = config.diffusion.timesteps
     betas = linear_beta_schedule(
         timesteps,
-        beta_start=config.noise.beta_start,
-        beta_end=config.noise.beta_end
+        beta_start=config.diffusion.beta_start,
+        beta_end=config.diffusion.beta_end
     ).to(device)
     alphas = 1. - betas
     alphas_cumprod = torch.cumprod(alphas, axis=0)
