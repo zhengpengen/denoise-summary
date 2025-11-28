@@ -7,7 +7,7 @@ from omegaconf import DictConfig, OmegaConf
 import nltk
 import wandb
 from sentence_transformers import SentenceTransformer
-from torch.cuda.amp import autocast, GradScaler # Import for Mixed Precision
+from torch.amp import autocast, GradScaler # Import for Mixed Precision
 
 # Your project's imports
 from dataloader import get_summarization_dataloaders
@@ -198,7 +198,7 @@ def train(config: DictConfig):
 
     # --- Optimizer & Scaler ---
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.optim.lr, weight_decay=config.optim.weight_decay)
-    scaler = GradScaler(device='cuda') # Initialize Mixed Precision Scaler
+    scaler = GradScaler('cuda') # Initialize Mixed Precision Scaler
 
     # --- WandB Watch ---
     if config.wandb.mode != 'disabled':

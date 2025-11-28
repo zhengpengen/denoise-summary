@@ -8,6 +8,8 @@ loader:
   batch_size: 128
   eval_batch_size: 128
   num_workers: 4
+  # Batch size for the one-time dataset preprocessing. Larger is often faster.
+  preprocessing_batch_size: 500
   pin_memory: True
 
 # --- Data Settings ---
