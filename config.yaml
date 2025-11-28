@@ -10,6 +10,15 @@ loader:
   num_workers: 4
   pin_memory: True
 
+# --- Data Settings ---
+data:
+  dataset_name: cnn_dailymail
+  version: "3.0.0"
+  # The dataloader specifically looks for these keys to know which split to load
+  train: train
+  validation: validation
+  test: test
+
 # --- Model Architecture ---
 model:
   # Embedding dimension for sentences and the model's hidden size
@@ -17,6 +26,7 @@ model:
   # Transformer parameters
   num_layers: 6
   num_heads: 6
+  dropout: 0.1
 
 # --- Task-specific Settings ---
 summarization:

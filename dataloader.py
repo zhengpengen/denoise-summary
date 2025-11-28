@@ -11,7 +11,7 @@ LOGGER = utils.get_logger(__name__)
 # Ensure NLTK sentence tokenizer is available
 try:
     nltk.data.find('tokenizers/punkt')
-except nltk.downloader.DownloadError:
+except LookupError:
     LOGGER.info("NLTK 'punkt' model not found. Downloading...")
     nltk.download('punkt')
 
@@ -26,9 +26,9 @@ class SummarizationDataset(torch.utils.data.Dataset):
 
         LOGGER.info(f"Loading dataset {self.config.data.train} for split {self.split}")
         self.dataset = datasets.load_dataset(
-            self.config.data.train, '3.0.0',
+            self.config.data.dataset_name, 
+            self.config.data.version,
             split=self.split,
-            cache_dir=self.config.data.cache_dir
         )
 
         LOGGER.info("Loading sentence embedding model...")
