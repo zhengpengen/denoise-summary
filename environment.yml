@@ -19,5 +19,5 @@ dependencies:
   - pip
   - pip:
     - sentence-transformers
-    - rouge-score
+    # - rouge-score
     - wandb

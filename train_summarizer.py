@@ -185,12 +185,44 @@ def train(config: DictConfig):
 
     # --- Initialize Sentence Transformer on GPU ---
     LOGGER.info("Loading embedding model to GPU...")
-    sentence_model = SentenceTransformer('all-MiniLM-L6-v2').to(device)
+    sentence_model = SentenceTransformer(config.summarization.sentence_embedder_name_or_path).to(device)
     sentence_model.eval() # Ensure it's in eval mode
 
     # --- Dataloaders ---
     LOGGER.info("Setting up dataloaders...")
     train_loader, valid_loader = get_summarization_dataloaders(config)
+
+    # --- Print dataset / loader info ---
+    try:
+        num_train_batches = len(train_loader)
+    except Exception:
+        num_train_batches = "unknown"
+
+    try:
+        num_valid_batches = len(valid_loader)
+    except Exception:
+        num_valid_batches = "unknown"
+
+    # Attempt to read one batch to determine actual per-batch sizes (safe fallback to config)
+    try:
+        first_batch = next(iter(train_loader))
+        if isinstance(first_batch.get('summary_mask', None), torch.Tensor):
+            actual_batch_size = first_batch['summary_mask'].shape[0]
+        else:
+            # article_sents is a list-of-lists, use its length
+            actual_batch_size = len(first_batch.get('article_sents', []))
+
+        # number of sentences per sample (max_sentences)
+        if isinstance(first_batch.get('attention_mask', None), torch.Tensor):
+            sentences_per_sample = first_batch['attention_mask'].shape[1]
+        else:
+            sentences_per_sample = getattr(config.summarization, 'max_sentences', 'unknown')
+    except Exception:
+        actual_batch_size = getattr(config.loader, 'batch_size', 'unknown')
+        sentences_per_sample = getattr(config.summarization, 'max_sentences', 'unknown')
+
+    LOGGER.info(f"Batches per epoch (train/valid): {num_train_batches}/{num_valid_batches}")
+    LOGGER.info(f"Approx. samples per batch: {actual_batch_size} (sentences per sample: {sentences_per_sample})")
 
     # --- Model ---
     LOGGER.info("Setting up model...")

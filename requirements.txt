@@ -5,5 +5,5 @@ tqdm
 nltk
 sentence-transformers
 datasets
-rouge-score
+# rouge-score
 lightning
