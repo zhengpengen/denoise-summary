@@ -84,7 +84,7 @@ def train_one_epoch(model, dataloader, optimizer, scaler, alphas_cumprod, device
         noisy_mask = q_sample(summary_mask, t, alphas_cumprod)
 
         # 4. Mixed Precision Forward Pass & Loss
-        with autocast():
+        with autocast(device_type='cuda', dtype=torch.float16):
             predicted_logits = model(sentence_embeddings, noisy_mask, t, attention_mask)
 
             loss = F.cross_entropy(predicted_logits.view(-1, 2), summary_mask.view(-1), reduction='none')
@@ -142,7 +142,7 @@ def validate_one_epoch(model, dataloader, alphas_cumprod, device, config, senten
             noisy_mask = q_sample(summary_mask, t, alphas_cumprod)
 
             # Use autocast for validation too
-            with autocast():
+            with autocast(device_type='cuda', dtype=torch.float16):
                 predicted_logits = model(sentence_embeddings, noisy_mask, t, attention_mask)
 
                 loss = F.cross_entropy(predicted_logits.view(-1, 2), summary_mask.view(-1), reduction='none')
@@ -198,7 +198,7 @@ def train(config: DictConfig):
 
     # --- Optimizer & Scaler ---
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.optim.lr, weight_decay=config.optim.weight_decay)
-    scaler = GradScaler() # Initialize Mixed Precision Scaler
+    scaler = GradScaler(device='cuda') # Initialize Mixed Precision Scaler
 
     # --- WandB Watch ---
     if config.wandb.mode != 'disabled':
@@ -238,18 +238,14 @@ def train(config: DictConfig):
     for epoch in range(start_epoch, num_epochs):
         LOGGER.info(f"--- Epoch {epoch+1}/{num_epochs} ---")
         
-        train_progress_bar = tqdm(train_loader, desc=f"Training Epoch {epoch+1}", leave=False)
         # Pass scaler and sentence_model to train function
         train_loss = train_one_epoch(
-            model, train_loader, optimizer, scaler, 
-            alphas_cumprod, device, config, sentence_model
+            model, tqdm(train_loader, desc=f"Training Epoch {epoch+1}"), optimizer, scaler, alphas_cumprod, device, config, sentence_model
         )
         LOGGER.info(f"Average Training Loss: {train_loss:.4f}")
 
-        valid_progress_bar = tqdm(valid_loader, desc=f"Validating Epoch {epoch+1}", leave=False)
-        # Pass sentence_model to validate function
         val_loss = validate_one_epoch(
-            model, valid_loader, alphas_cumprod, device, config, sentence_model
+            model, tqdm(valid_loader, desc=f"Validating Epoch {epoch+1}"), alphas_cumprod, device, config, sentence_model
         )
         LOGGER.info(f"Average Validation Loss: {val_loss:.4f}")
 
