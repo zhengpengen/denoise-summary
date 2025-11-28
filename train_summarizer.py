@@ -238,6 +238,5 @@ def train(config: DictConfig):
         wandb.finish()
 
 if __name__ == '__main__':
-    # This will be executed when you run `python train_summarizer.py`
-    # Hydra will manage the configuration.
+    torch.multiprocessing.set_start_method('spawn', force=True)
     train()

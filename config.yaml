@@ -82,6 +82,7 @@ wandb:
 # --- Hydra Settings ---
 hydra:
   run:
-    dir: /content/drive/MyDrive/_ColabOutputs/cnn_dailymail/${now:%Y.%m.%d}/${now:%H%M%S}
+    # dir: /content/drive/MyDrive/_ColabOutputs/cnn_dailymail/${now:%Y.%m.%d}/${now:%H%M%S}
+    dir: ./outputs/${now:%Y.%m.%d}/${now:%H%M%S}
   job:
     chdir: true
