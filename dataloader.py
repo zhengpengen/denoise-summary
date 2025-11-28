@@ -135,11 +135,17 @@ def get_summarization_dataloaders(config):
         train_set,
         batch_size=config.loader.batch_size,
         shuffle=True,
-        num_workers=config.loader.num_workers
+        num_workers=config.loader.num_workers,
+        pin_memory=True, 
+        persistent_workers=True 
     )
+    
     valid_loader = torch.utils.data.DataLoader(
         valid_set,
         batch_size=config.loader.eval_batch_size,
-        shuffle=False, num_workers=config.loader.num_workers
+        shuffle=False, 
+        num_workers=config.loader.num_workers,
+        pin_memory=True,  
+        persistent_workers=True
     )
     return train_loader, valid_loader
