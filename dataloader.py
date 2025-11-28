@@ -2,7 +2,7 @@ import datasets
 import nltk
 import torch
 from rouge_score import rouge_scorer
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer
 
 import utils
 
@@ -33,10 +33,10 @@ class SummarizationDataset(torch.utils.data.Dataset):
         )
 
         LOGGER.info("Loading sentence embedding model...")
-        self.sentence_embedder = SentenceTransformer(
-            self.config.summarization.sentence_embedder_name_or_path
-        )
-        self.embedding_dim = self.sentence_embedder.get_sentence_embedding_dimension()
+        # self.sentence_embedder = SentenceTransformer(
+        #     self.config.summarization.sentence_embedder_name_or_path
+        # )
+        # self.embedding_dim = self.sentence_embedder.get_sentence_embedding_dimension()
 
         self.rouge = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
 
@@ -99,37 +99,31 @@ class SummarizationDataset(torch.utils.data.Dataset):
         article_sents = article_sents[:self.max_sentences]
         num_sents = len(article_sents)
 
-        # 1. Create oracle mask (x_0)
+        # 1. Create oracle mask (x_0) - Keep this here, it's cheap logic
         oracle_mask = self._create_oracle_summary_mask(list(article_sents), list(summary_sents))
 
-        # 2. Embed article sentences
-        sentence_embeddings = self.sentence_embedder.encode(
-            article_sents, 
-            convert_to_tensor=True,
-            normalize_embeddings=True,
-            show_progress_bar=False
-        )
+        # 2. PAD THE STRINGS (New Logic)
+        # Instead of embedding, we just pad the list of strings with empty strings
+        # so every item has the same length (max_sentences)
+        while len(article_sents) < self.max_sentences:
+            article_sents.append("") # Empty string for padding
 
-        # 3. Pad to max_sentences
-        padded_embeddings = torch.zeros(self.max_sentences, self.embedding_dim)
+        # 3. Pad masks
         padded_mask = torch.zeros(self.max_sentences, dtype=torch.long)
         attention_mask = torch.zeros(self.max_sentences, dtype=torch.long)
 
-        padded_embeddings[:num_sents] = sentence_embeddings
         padded_mask[:num_sents] = oracle_mask
         attention_mask[:num_sents] = 1
-
+        
+        # Return RAW STRINGS, not embeddings
         return {
-            'sentence_embeddings': padded_embeddings,
+            'article_sents': article_sents, # This is now a list of strings
             'summary_mask': padded_mask,
             'attention_mask': attention_mask
         }
 
 def get_summarization_dataloaders(config):
     train_set = SummarizationDataset(config, split='train')
-    # For validation, cnn_dailymail uses the 'validation' split. For other datasets, it might be 'test'.
-    # It's good practice to check which splits are available.
-    # For cnn_dailymail, splits are 'train', 'validation', 'test'.
     valid_set = SummarizationDataset(config, split='validation') 
     train_loader = torch.utils.data.DataLoader(
         train_set,
