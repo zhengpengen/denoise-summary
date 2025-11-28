@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from tqdm.auto import tqdm
 import hydra
 from omegaconf import DictConfig
+import nltk
 
 # Your project's imports
 from dataloader import get_summarization_dataloaders
@@ -119,6 +120,11 @@ def validate_one_epoch(model, dataloader, alphas_cumprod, device, config):
 
 @hydra.main(version_base=None, config_path='.', config_name='config')
 def train(config: DictConfig):
+
+    try:
+      nltk.data.find('tokenizers/punkt_tab')
+    except LookupError:
+      nltk.download('punkt_tab')
     """Main training function."""
     LOGGER = utils.get_logger(__name__)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
