@@ -103,8 +103,10 @@ class SummarizationDataset(torch.utils.data.Dataset):
 
         # 2. Embed article sentences
         sentence_embeddings = self.sentence_embedder.encode(
-            article_sents, convert_to_tensor=True,
-            normalize_embeddings=True
+            article_sents, 
+            convert_to_tensor=True,
+            normalize_embeddings=True,
+            show_progress_bar=False
         )
 
         # 3. Pad to max_sentences
