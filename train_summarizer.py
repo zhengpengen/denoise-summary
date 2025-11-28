@@ -55,10 +55,9 @@ def train_one_epoch(model, dataloader, optimizer, alphas_cumprod, device, config
     """Runs a single training epoch."""
     model.train()
     total_loss = 0.0
-    progress_bar = tqdm(dataloader, desc="Training", leave=False)
     timesteps = config.diffusion.timesteps
 
-    for batch in progress_bar:
+    for batch in dataloader:
         optimizer.zero_grad()
 
         sentence_embeddings = batch['sentence_embeddings'].to(device)
@@ -87,7 +86,6 @@ def train_one_epoch(model, dataloader, optimizer, alphas_cumprod, device, config
         optimizer.step()
 
         total_loss += loss.item()
-        progress_bar.set_postfix(loss=loss.item())
 
     return total_loss / len(dataloader)
 
@@ -96,11 +94,10 @@ def validate_one_epoch(model, dataloader, alphas_cumprod, device, config):
     """Runs a single validation epoch."""
     model.eval()
     total_loss = 0.0
-    progress_bar = tqdm(dataloader, desc="Validating", leave=False)
     timesteps = config.diffusion.timesteps
 
     with torch.no_grad():
-        for batch in progress_bar:
+        for batch in dataloader:
             sentence_embeddings = batch['sentence_embeddings'].to(device)
             summary_mask = batch['summary_mask'].to(device)
             attention_mask = batch['attention_mask'].to(device)
@@ -116,7 +113,6 @@ def validate_one_epoch(model, dataloader, alphas_cumprod, device, config):
             loss = (loss * attention_mask).sum() / attention_mask.sum()
 
             total_loss += loss.item()
-            progress_bar.set_postfix(loss=loss.item())
 
     return total_loss / len(dataloader)
 
@@ -163,17 +159,21 @@ def train(config: DictConfig):
     for epoch in range(num_epochs):
         LOGGER.info(f"--- Epoch {epoch+1}/{num_epochs} ---")
         
-        train_loss = train_one_epoch(model, train_loader, optimizer, alphas_cumprod, device, config)
+        # Wrap the dataloader with tqdm here for a clean progress bar
+        train_progress_bar = tqdm(train_loader, desc=f"Training Epoch {epoch+1}", leave=False)
+        train_loss = train_one_epoch(model, train_progress_bar, optimizer, alphas_cumprod, device, config)
         LOGGER.info(f"Average Training Loss: {train_loss:.4f}")
 
-        val_loss = validate_one_epoch(model, valid_loader, alphas_cumprod, device, config)
+        # Do the same for validation
+        valid_progress_bar = tqdm(valid_loader, desc=f"Validating Epoch {epoch+1}", leave=False)
+        val_loss = validate_one_epoch(model, valid_progress_bar, alphas_cumprod, device, config)
         LOGGER.info(f"Average Validation Loss: {val_loss:.4f}")
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             torch.save(model.state_dict(), checkpoint_path)
             LOGGER.info(f"New best model saved to {checkpoint_path} with validation loss: {best_val_loss:.4f}")
-        
+
     LOGGER.info("Training finished.")
 
 if __name__ == '__main__':
