@@ -138,8 +138,7 @@ def train(config: DictConfig):
         # 2. Add a new secret named 'WANDB_API_KEY' and paste your key.
         # 3. Make sure the "Notebook access" toggle is enabled.
         try:
-            from google.colab import userdata
-            wandb.login(key=userdata.get('WANDB_API_KEY'))
+            wandb.login(key='590cce1cdb16ab5451d230d3c1630a3897cda782')
         except (ImportError, NameError):
             # This will fail if not in Colab or if userdata is not available.
             # It will then fall back to the standard `wandb login` from the command line.
