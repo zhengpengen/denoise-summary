@@ -3,8 +3,9 @@ import torch
 import torch.nn.functional as F
 from tqdm.auto import tqdm
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 import nltk
+import wandb
 
 # Your project's imports
 from dataloader import get_summarization_dataloaders
@@ -128,6 +129,31 @@ def train(config: DictConfig):
     """Main training function."""
     LOGGER = utils.get_logger(__name__)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    # --- Initialize WandB ---
+    if config.wandb.mode != 'disabled':
+        # --- Colab-specific login using secrets ---
+        # In a Colab environment, it's best to use secrets for your API key.
+        # 1. Click the key icon (🔑) on the left sidebar of your Colab notebook.
+        # 2. Add a new secret named 'WANDB_API_KEY' and paste your key.
+        # 3. Make sure the "Notebook access" toggle is enabled.
+        try:
+            from google.colab import userdata
+            wandb.login(key=userdata.get('WANDB_API_KEY'))
+        except (ImportError, NameError):
+            # This will fail if not in Colab or if userdata is not available.
+            # It will then fall back to the standard `wandb login` from the command line.
+            LOGGER.info("Not in a Colab environment or 'userdata' not found. Assuming 'wandb login' has been run.")
+        # Convert OmegaConf to a standard dict for wandb
+        config_dict = OmegaConf.to_container(config, resolve=True, throw_on_missing=True)
+        wandb.init(
+            project=config.wandb.project,
+            entity=config.wandb.entity,
+            config=config_dict,
+            mode=config.wandb.mode,
+            name=os.path.basename(os.getcwd()) # Use Hydra's run directory name
+        )
+
     LOGGER.info(f"Using device: {device}")
 
     # --- Dataloaders ---
@@ -141,6 +167,10 @@ def train(config: DictConfig):
     # --- Optimizer ---
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.optim.lr, weight_decay=config.optim.weight_decay)
 
+    # --- WandB Watch ---
+    if config.wandb.mode != 'disabled':
+        wandb.watch(model, log='all', log_freq=config.trainer.log_every_n_steps)
+
     # --- Diffusion Schedule ---
     timesteps = config.diffusion.timesteps
     betas = linear_beta_schedule(
@@ -151,18 +181,29 @@ def train(config: DictConfig):
     alphas = 1. - betas
     alphas_cumprod = torch.cumprod(alphas, axis=0)
 
-    # --- Checkpointing ---
+    # --- State for Checkpointing and Resuming ---
     best_val_loss = float('inf')
+    start_epoch = 0
     checkpoint_dir = os.getcwd() # Hydra sets the working directory for each run
     checkpoint_path = os.path.join(checkpoint_dir, 'best_model.pt')
     LOGGER.info(f"Checkpoints will be saved in: {checkpoint_dir}")
+
+    # --- Resume from Checkpoint if specified ---
+    if config.trainer.resume_from_checkpoint and os.path.exists(config.trainer.resume_from_checkpoint):
+        LOGGER.info(f"Resuming training from checkpoint: {config.trainer.resume_from_checkpoint}")
+        checkpoint = torch.load(config.trainer.resume_from_checkpoint, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_epoch = checkpoint['epoch'] + 1
+        best_val_loss = checkpoint['best_val_loss']
+        LOGGER.info(f"Resumed from epoch {start_epoch-1}. Best validation loss was {best_val_loss:.4f}.")
 
     # --- Training Loop ---
     LOGGER.info("Starting training...")
     # Using max_steps from config, assuming 1 epoch is one pass through data
     num_epochs = config.trainer.max_steps // len(train_loader)
 
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, num_epochs):
         LOGGER.info(f"--- Epoch {epoch+1}/{num_epochs} ---")
         
         # Wrap the dataloader with tqdm here for a clean progress bar
@@ -175,12 +216,27 @@ def train(config: DictConfig):
         val_loss = validate_one_epoch(model, valid_progress_bar, alphas_cumprod, device, config)
         LOGGER.info(f"Average Validation Loss: {val_loss:.4f}")
 
+        # Log metrics to WandB
+        if config.wandb.mode != 'disabled':
+            wandb.log({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
+
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            torch.save(model.state_dict(), checkpoint_path)
+            # Save a complete checkpoint
+            checkpoint = {
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'best_val_loss': best_val_loss,
+            }
+            torch.save(checkpoint, checkpoint_path)
             LOGGER.info(f"New best model saved to {checkpoint_path} with validation loss: {best_val_loss:.4f}")
 
     LOGGER.info("Training finished.")
+
+    # --- Finish WandB Run ---
+    if config.wandb.mode != 'disabled':
+        wandb.finish()
 
 if __name__ == '__main__':
     # This will be executed when you run `python train_summarizer.py`

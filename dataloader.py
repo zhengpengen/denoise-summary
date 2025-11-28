@@ -29,6 +29,7 @@ class SummarizationDataset(torch.utils.data.Dataset):
             self.config.data.dataset_name, 
             self.config.data.version,
             split=self.split,
+            cache_dir=self.config.data.cache_dir,
         )
 
         LOGGER.info("Loading sentence embedding model...")

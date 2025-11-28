@@ -13,7 +13,7 @@ First, ensure you have Miniconda or Anaconda installed. Then, create and activat
 conda env create -f environment.yml
 
 # Activate the environment
-conda activate mdlm
+conda activate denoise
 ```
 
 The first time you run the code, it will automatically download the necessary `punkt` tokenizer from NLTK.

@@ -19,7 +19,7 @@ data:
   validation: validation
   test: test
   # Directory to cache the processed dataset
-  cache_dir: null
+  cache_dir: ./cache/cnn_dailymail/
 
 # --- Model Architecture ---
 model:
@@ -70,6 +70,14 @@ trainer:
   val_check_interval: 5000
   # Log every N steps
   log_every_n_steps: 50
+  # Path to a checkpoint file to resume training from. If null, starts fresh.
+  resume_from_checkpoint: null
+
+# --- WandB Logging ---
+wandb:
+  project: "denoise-summary"
+  entity: zhengpengen # Your wandb username or team name
+  mode: "online" # "online", "offline", or "disabled"
 
 # --- Hydra Settings ---
 hydra:

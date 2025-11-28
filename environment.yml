@@ -1,6 +1,7 @@
-name: mdlm
+name: denoise
 channels:
   - pytorch
+  - nvidia
   - conda-forge
   - defaults
 dependencies:
@@ -19,3 +20,4 @@ dependencies:
   - pip:
     - sentence-transformers
     - rouge-score
+    - wandb
