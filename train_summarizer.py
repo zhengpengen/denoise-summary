@@ -8,6 +8,7 @@ import nltk
 import wandb
 from sentence_transformers import SentenceTransformer
 from torch.amp import autocast, GradScaler # Import for Mixed Precision
+from transformers import get_linear_schedule_with_warmup
 
 # Your project's imports
 from dataloader import get_summarization_dataloaders
@@ -34,7 +35,7 @@ def q_sample(x_start: torch.Tensor, t: torch.Tensor, alphas_cumprod: torch.Tenso
     return noisy_mask
 
 
-def train_one_epoch(model, dataloader, optimizer, scaler, alphas_cumprod, device, config, sentence_model):
+def train_one_epoch(model, dataloader, optimizer, scaler, alphas_cumprod, device, config, sentence_model, scheduler):
     """Runs a single training epoch with GPU embedding and Mixed Precision."""
     model.train()
     total_loss = 0.0
@@ -100,6 +101,7 @@ def train_one_epoch(model, dataloader, optimizer, scaler, alphas_cumprod, device
         
         scaler.step(optimizer)
         scaler.update()
+        scheduler.step()
 
         total_loss += loss.item()
 
@@ -232,6 +234,15 @@ def train(config: DictConfig):
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.optim.lr, weight_decay=config.optim.weight_decay)
     scaler = GradScaler('cuda') # Initialize Mixed Precision Scaler
 
+    total_steps = config.trainer.max_steps
+    warmup_steps = int(0.05 * total_steps) # 5% warmup
+
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, 
+        num_warmup_steps=warmup_steps, 
+        num_training_steps=total_steps
+    )
+
     # --- WandB Watch ---
     if config.wandb.mode != 'disabled':
         wandb.watch(model, log='all', log_freq=config.trainer.log_every_n_steps)
@@ -272,7 +283,7 @@ def train(config: DictConfig):
         
         # Pass scaler and sentence_model to train function
         train_loss = train_one_epoch(
-            model, tqdm(train_loader, desc=f"Training Epoch {epoch+1}"), optimizer, scaler, alphas_cumprod, device, config, sentence_model
+            model, tqdm(train_loader, desc=f"Training Epoch {epoch+1}"), optimizer, scaler, alphas_cumprod, device, config, sentence_model, scheduler
         )
         LOGGER.info(f"Average Training Loss: {train_loss:.4f}")
 

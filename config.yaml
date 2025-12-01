@@ -5,8 +5,8 @@ seed: 42
 
 # --- Data Loading ---
 loader:
-  batch_size: 128
-  eval_batch_size: 128
+  batch_size: 512
+  eval_batch_size: 512
   num_workers: 4
   # Batch size for the one-time dataset preprocessing. Larger is often faster.
   preprocessing_batch_size: 1000
@@ -45,7 +45,7 @@ summarization:
 # --- Diffusion Process ---
 diffusion:
   # Number of noising steps
-  timesteps: 1000
+  timesteps: 500
   # Noise schedule parameters
   beta_start: 0.0001
   beta_end: 0.02
@@ -54,8 +54,8 @@ diffusion:
 # --- Optimizer ---
 optim:
   name: 'AdamW'
-  weight_decay: 0
-  lr: 3e-4
+  weight_decay: 0.01
+  lr: 1e-4
   betas: [0.9, 0.999]
   eps: 1e-8
 
@@ -63,9 +63,9 @@ optim:
 trainer:
   accelerator: 'gpu'
   devices: 1
-  gradient_clip_val: 1.0
+  gradient_clip_val: 0.5
   # Total training steps. Number of epochs will be calculated from this.
-  max_steps: 200000
+  max_steps: 50000
   # Run validation every N training steps
   val_check_interval: 5000
   # Log every N steps

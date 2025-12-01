@@ -1,7 +1,7 @@
 import torch
 import datasets
-import logging
-import absl.logging
+# import logging
+# import absl.logging
 import utils
 import os
 
@@ -80,7 +80,8 @@ class SummarizationDataset(torch.utils.data.Dataset):
 
         # Optimization: Use all cores
         # Since we removed ROUGE, this mapping is very lightweight and fast.
-        max_proc = os.cpu_count()
+        # max_proc = os.cpu_count()
+        max_proc = self.config.loader.num_workers
         LOGGER.info(f"Formatting dataset with {max_proc} workers...")
         
         processed_dataset = dataset.map(
