@@ -1,4 +1,5 @@
 import os
+import math
 import torch
 import torch.nn.functional as F
 from tqdm.auto import tqdm
@@ -17,20 +18,39 @@ import utils
 
 # --- 1. Diffusion-related components (Noise Scheduler) ---
 
-def linear_beta_schedule(timesteps: int, beta_start: float = 0.0001, beta_end: float = 0.02) -> torch.Tensor:
-    """Returns a linear schedule for beta (noise variance)."""
-    return torch.linspace(beta_start, beta_end, timesteps)
+def cosine_beta_schedule(timesteps, s=0.008):
+    """
+    Cosine schedule as proposed in https://arxiv.org/abs/2102.09672
+    """
+    steps = timesteps + 1
+    x = torch.linspace(0, timesteps, steps)
+    alphas_cumprod = torch.cos(((x / timesteps) + s) / (1 + s) * math.pi * 0.5) ** 2
+    alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
+    betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
+    return torch.clip(betas, 0.0001, 0.9999)
 
 def q_sample(x_start: torch.Tensor, t: torch.Tensor, alphas_cumprod: torch.Tensor) -> torch.Tensor:
     """
-    Forward process for discrete data (binary mask).
+    Absorbing State Forward Process.
+    Transition: Data (mostly 0s) -> Pure 1s (Noise).
     """
+    # 1. Get the "retention probability" for this timestep
+    # alpha_bar_t is the probability that a token is NOT corrupted yet.
+    # At t=0, alpha=1.0 (Keep everything)
+    # At t=T, alpha=0.0 (Corrupt everything)
     alpha_bar_t = alphas_cumprod.gather(-1, t).view(-1, 1) # Shape: (B, 1)
     
-    prob_x_t_is_one = alpha_bar_t * x_start + (1 - alpha_bar_t) * (1 - x_start)
+    # 2. Determine which items to corrupt (flip to 1)
+    # We sample a mask where 1 means "corrupt this position"
+    # The probability of corruption is (1 - alpha_bar_t)
+    corruption_prob = 1 - alpha_bar_t
+    corruption_mask = torch.bernoulli(torch.ones_like(x_start) * corruption_prob).long()
 
-    # Sample from a Bernoulli distribution
-    noisy_mask = torch.bernoulli(prob_x_t_is_one.float()).long()
+    # 3. Apply the corruption
+    # Logic: If x_start is already 1, it stays 1.
+    #        If x_start is 0, it becomes 1 ONLY IF the corruption_mask says so.
+    #        It NEVER turns a 1 into a 0.
+    noisy_mask = x_start | corruption_mask
     
     return noisy_mask
 
@@ -248,13 +268,10 @@ def train(config: DictConfig):
 
     # --- Diffusion Schedule ---
     timesteps = config.diffusion.timesteps
-    betas = linear_beta_schedule(
-        timesteps,
-        beta_start=config.diffusion.beta_start,
-        beta_end=config.diffusion.beta_end
-    ).to(device)
+    betas = cosine_beta_schedule(timesteps).to(device)
     alphas = 1. - betas
     alphas_cumprod = torch.cumprod(alphas, axis=0)
+    alphas_cumprod[-1] = 0.0
 
     # --- State for Checkpointing ---
     best_val_loss = float('inf')

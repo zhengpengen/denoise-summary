@@ -68,6 +68,8 @@ def p_sample_loop(model, sentence_embeddings, attention_mask, alphas, alphas_cum
         
         # Avoid division by zero
         prob_xt_prev_is_one = prob_xt_prev_is_one / (denominator + 1e-8)
+        prob_xt_prev_is_one = torch.clamp(prob_xt_prev_is_one, min=0.0, max=1.0) 
+
 
         # Sample the mask for the previous step
         current_mask = torch.bernoulli(prob_xt_prev_is_one).long()

@@ -15,7 +15,55 @@ from dataloader import get_summarization_dataloaders
 from summarization_model import SummarizationDenoiser
 import utils
 
-# --- 1. Diffusion-related components (Noise Scheduler) ---
+class FocalLoss(torch.nn.Module):
+    def __init__(self, alpha=0.8, gamma=2.0, reduction='mean'):
+        """
+        alpha: Weight for the positive class (1). 
+               Since 1s are rare (1:20), we set alpha high (0.8) to punish missing them.
+        gamma: Focusing parameter. Higher values (e.g., 2.0) reduce the loss 
+               contribution from easy examples (background).
+        """
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+
+    def forward(self, inputs, targets, mask=None):
+        # inputs: (B, L, 2) -> Logits
+        # targets: (B, L)   -> Indices (0 or 1)
+        # mask:    (B, L)   -> Attention mask (1 for valid, 0 for pad)
+
+        # 1. Calculate Standard Cross Entropy (per pixel, no reduction yet)
+        # We assume inputs are raw logits (not softmaxed yet)
+        ce_loss = F.cross_entropy(inputs.view(-1, 2), targets.view(-1), reduction='none')
+        
+        # 2. Get the probability of the TRUE class (p_t)
+        # Apply softmax to get probabilities
+        pt = torch.exp(-ce_loss) 
+        
+        # 3. Calculate Focal Component: (1 - p_t)^gamma
+        focal_term = (1 - pt) ** self.gamma
+
+        # 4. Calculate Alpha Component (Balance weights)
+        # If target is 1, weight = alpha. If target is 0, weight = 1 - alpha.
+        targets_flat = targets.view(-1)
+        alpha_t = torch.where(targets_flat == 1, self.alpha, 1 - self.alpha)
+        
+        # 5. Combine: Alpha * Focal * CE
+        loss = alpha_t * focal_term * ce_loss
+
+        # 6. Apply Attention Mask (ignore padding)
+        if mask is not None:
+            mask_flat = mask.view(-1)
+            loss = loss * mask_flat
+            
+            # Normalize by the number of VALID tokens, not total size
+            if self.reduction == 'mean':
+                return loss.sum() / (mask_flat.sum() + 1e-8)
+            else:
+                return loss.sum()
+        
+        return loss.mean()
 
 def linear_beta_schedule(timesteps: int, beta_start: float = 0.0001, beta_end: float = 0.02) -> torch.Tensor:
     """Returns a linear schedule for beta (noise variance)."""
@@ -35,7 +83,7 @@ def q_sample(x_start: torch.Tensor, t: torch.Tensor, alphas_cumprod: torch.Tenso
     return noisy_mask
 
 
-def train_one_epoch(model, dataloader, optimizer, scaler, alphas_cumprod, device, config, sentence_model, scheduler):
+def train_one_epoch(model, dataloader, optimizer, scaler, alphas_cumprod, device, config, sentence_model, scheduler, loss_fn):
     """Runs a single training epoch with GPU embedding and Mixed Precision."""
     model.train()
     total_loss = 0.0
@@ -70,6 +118,7 @@ def train_one_epoch(model, dataloader, optimizer, scaler, alphas_cumprod, device
         D = flat_embeddings.shape[1]
         
         sentence_embeddings = flat_embeddings.view(B, L_max, D)
+        # -----------------------------------
 
         summary_mask = batch['summary_mask'].to(device) # This is x_0
         attention_mask = batch['attention_mask'].to(device)
@@ -87,9 +136,10 @@ def train_one_epoch(model, dataloader, optimizer, scaler, alphas_cumprod, device
         with autocast(device_type='cuda', dtype=torch.float16):
             predicted_logits = model(sentence_embeddings, noisy_mask, t, attention_mask)
 
-            loss = F.cross_entropy(predicted_logits.view(-1, 2), summary_mask.view(-1), reduction='none')
-            loss = loss.view(B, L_max)
-            loss = (loss * attention_mask).sum() / attention_mask.sum()
+            # loss = F.cross_entropy(predicted_logits.view(-1, 2), summary_mask.view(-1), reduction='none')
+            # loss = loss.view(B, L_max)
+            # loss = (loss * attention_mask).sum() / attention_mask.sum()
+            loss = loss_fn(predicted_logits, summary_mask, attention_mask)
 
         # 5. Scaled Backpropagation
         scaler.scale(loss).backward()
@@ -107,7 +157,7 @@ def train_one_epoch(model, dataloader, optimizer, scaler, alphas_cumprod, device
     return total_loss / len(dataloader)
 
 
-def validate_one_epoch(model, dataloader, alphas_cumprod, device, config, sentence_model):
+def validate_one_epoch(model, dataloader, alphas_cumprod, device, config, sentence_model, loss_fn):
     """Runs a single validation epoch."""
     model.eval()
     total_loss = 0.0
@@ -146,9 +196,10 @@ def validate_one_epoch(model, dataloader, alphas_cumprod, device, config, senten
             with autocast(device_type='cuda', dtype=torch.float16):
                 predicted_logits = model(sentence_embeddings, noisy_mask, t, attention_mask)
 
-                loss = F.cross_entropy(predicted_logits.view(-1, 2), summary_mask.view(-1), reduction='none')
-                loss = loss.view(B, L_max)
-                loss = (loss * attention_mask).sum() / attention_mask.sum()
+                # loss = F.cross_entropy(predicted_logits.view(-1, 2), summary_mask.view(-1), reduction='none')
+                # loss = loss.view(B, L_max)
+                # loss = (loss * attention_mask).sum() / attention_mask.sum()
+                loss = loss_fn(predicted_logits, summary_mask, attention_mask)
 
             total_loss += loss.item()
 
@@ -165,6 +216,7 @@ def train(config: DictConfig):
     """Main training function."""
     LOGGER = utils.get_logger(__name__)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    focal = FocalLoss(alpha=0.8, gamma=2.0).to(device)
     
     # --- Initialize WandB ---
     if config.wandb.mode != 'disabled':
@@ -282,12 +334,12 @@ def train(config: DictConfig):
         
         # Pass scaler and sentence_model to train function
         train_loss = train_one_epoch(
-            model, tqdm(train_loader, desc=f"Training Epoch {epoch+1}"), optimizer, scaler, alphas_cumprod, device, config, sentence_model, scheduler
+            model, tqdm(train_loader, desc=f"Training Epoch {epoch+1}"), optimizer, scaler, alphas_cumprod, device, config, sentence_model, scheduler, loss_fn=focal
         )
         LOGGER.info(f"Average Training Loss: {train_loss:.4f}")
 
         val_loss = validate_one_epoch(
-            model, tqdm(valid_loader, desc=f"Validating Epoch {epoch+1}"), alphas_cumprod, device, config, sentence_model
+            model, tqdm(valid_loader, desc=f"Validating Epoch {epoch+1}"), alphas_cumprod, device, config, sentence_model, loss_fn=focal
         )
         LOGGER.info(f"Average Validation Loss: {val_loss:.4f}")
 
