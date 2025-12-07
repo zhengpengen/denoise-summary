@@ -1,7 +1,7 @@
 defaults:
   - _self_
   - /callbacks: [checkpoint_every_n_steps, checkpoint_monitor, learning_rate_monitor]
-  - /data: openwebtext
+  - /data: cnn_dailymail
   - /model: small
   - /strategy: ddp
   - /noise: loglinear
@@ -15,7 +15,7 @@ time_conditioning: False
 T: 0  # 0 (continuous time) / 1000 
 subs_masking: False
 
-seed: 1
+seed: 42
 
 loader:
   global_batch_size: 512
@@ -28,7 +28,7 @@ loader:
 
 sampling:
   predictor: ddpm_cache  # analytic, ddpm, ddpm_cache
-  steps: 128
+  steps: 50
   noise_removal: True
   # TODO(yair): @subham, why aren't these params under `eval`?
   num_sample_batches: 2  # Total samples: `num_gpus` * `loader.eval_batch_size` * num_sample_batches

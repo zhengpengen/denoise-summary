@@ -411,7 +411,11 @@ def get_dataset(
     elif 'scientific_papers' in dataset_name:
       text = example['article']
     else:
-      text = example['text']
+      if dataset_name == 'ereverter/cnn_dailymail_extractive':
+        # The 'src' field is a list of sentences
+        text = [" ".join(s) for s in example['src']]
+      else:
+        text = example['text']
     
     if detokenizer is not None:
       text = _apply_detokenizer(detokenizer)(text)
@@ -435,6 +439,10 @@ def get_dataset(
                          add_special_tokens=True,
                          return_attention_mask=True,
                          return_token_type_ids=True)
+    
+    if dataset_name == 'ereverter/cnn_dailymail_extractive':
+      tokens['labels'] = example['labels']
+
     return tokens
 
   if streaming:
@@ -458,6 +466,8 @@ def get_dataset(
   elif dataset_name == 'ag_news':
     tokenized_dataset = tokenized_dataset.remove_columns(
       ['text', 'label'])
+  elif dataset_name == 'ereverter/cnn_dailymail_extractive':
+    tokenized_dataset = tokenized_dataset.remove_columns(['src', 'tgt'])
   else:
     tokenized_dataset = tokenized_dataset.remove_columns(
       'text')

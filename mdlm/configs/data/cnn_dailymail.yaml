@@ -1,0 +1,9 @@
+defaults:
+  - base_data
+
+train: ereverter/cnn_dailymail_extractive
+valid: ereverter/cnn_dailymail_extractive
+tokenizer_name_or_path: bert-base-uncased
+wrap: False
+streaming: False
+cache_dir: ./cache

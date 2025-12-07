@@ -90,8 +90,14 @@ class Diffusion(L.LightningModule):
       self.mask_index = self.tokenizer.mask_token_id
     self.parameterization = self.config.parameterization
     if self.config.backbone == 'dit':
+      # For summarization, the output is a single logit per position.
+      if self.config.data.train == 'ereverter/cnn_dailymail_extractive':
+        output_dim = 1
+      else:
+        output_dim = self.vocab_size
+
       self.backbone = models.dit.DIT(
-        self.config, vocab_size=self.vocab_size)
+        self.config, vocab_size=output_dim)
     elif self.config.backbone == 'dimamba':
       self.backbone = models.dimamba.DiMamba(
         self.config,
@@ -574,12 +580,19 @@ class Diffusion(L.LightningModule):
 
   def q_xt(self, x, move_chance):
     """Computes the noisy sample xt.
-
-    Args:
-      x: int torch.Tensor with shape (batch_size,
-          diffusion_model_input_length), input. 
-      move_chance: float torch.Tensor with shape (batch_size, 1).
+    For text, this masks tokens.
+    For summarization, this flips 0s to 1s in the label mask.
     """
+    # For summarization, 1 is the absorbing state (like [MASK])
+    # and 0 is the clean state (like a vocabulary token).
+    if self.config.data.train == 'ereverter/cnn_dailymail_extractive':
+      # x is the binary label mask (x0)
+      # move_chance is 1 - exp(-sigma_t)
+      move_indices = torch.rand_like(x, dtype=torch.float32) < move_chance
+      # Flip 0s to 1s, but 1s stay 1s (absorbing state)
+      xt = torch.where(move_indices, 1, x)
+      return xt
+
     move_indices = torch.rand(
       * x.shape, device=x.device) < move_chance
     xt = torch.where(move_indices, self.mask_index, x)
@@ -844,7 +857,38 @@ class Diffusion(L.LightningModule):
                           dim=-1,
                           index=x0[:, :, None]).squeeze(-1)
 
-  def _forward_pass_diffusion(self, x0):
+  def _forward_pass_diffusion(self, x0, attention_mask=None, label_mask=None):
+    """
+    Main diffusion loss calculation. Can handle both text (x0) and 
+    summarization (label_mask) diffusion.
+
+    Args:
+        x0: The clean text tokens.
+        attention_mask: Mask for the text tokens.
+        label_mask: The clean binary label mask for summarization.
+    """
+    if self.config.data.train == 'ereverter/cnn_dailymail_extractive':
+      # For summarization, the diffusion happens on the label_mask.
+      # The model input is the source text (x0) and the noisy mask (xt).
+      t = self._sample_t(label_mask.shape[0], label_mask.device)
+      sigma, dsigma = self.noise(t)
+      unet_conditioning = sigma[:, None]
+      move_chance = 1 - torch.exp(-sigma[:, None, None])
+
+      # Corrupt the clean label mask to get xt
+      xt = self.q_xt(label_mask, move_chance)
+
+      # The backbone gets the source text and the noisy mask
+      model_output = self.backbone(x0, unet_conditioning, xt)
+      
+      # The model predicts logits for each position being a 0 or 1.
+      # We use binary cross-entropy. The target is the clean label_mask.
+      loss = F.binary_cross_entropy_with_logits(
+          model_output.squeeze(-1), label_mask.float(), reduction='none')
+      
+      # The loss is scaled by the noise schedule, similar to text diffusion.
+      return loss * (dsigma / torch.expm1(sigma))[:, None]
+
     t = self._sample_t(x0.shape[0], x0.device)
     if self.T > 0:
       t = (t * self.T).to(torch.int)
@@ -897,13 +941,28 @@ class Diffusion(L.LightningModule):
     (input_tokens, output_tokens,
      attention_mask) = self._maybe_sub_sample(
        x0, attention_mask)
+    
+    # The 'labels' key will only exist for the summarization dataset
+    label_mask = batch.get('labels', None)
+    if label_mask is not None:
+      label_mask = label_mask.to(self.device)
+      # For summarization, the attention mask should correspond to the
+      # length of the label mask, not the (potentially truncated) source text.
+      # We assume all positions in the label mask are valid.
+      attention_mask = torch.ones_like(label_mask, device=self.device)
+      # The input tokens to the model are the source text.
+      x0 = batch['input_ids'].to(self.device)
 
     if self.parameterization == 'ar':
       logprobs = self.backbone(input_tokens, None)
       loss = - logprobs.gather(
         -1, output_tokens[:, :, None])[:, :, 0]
     else:
-      loss = self._forward_pass_diffusion(input_tokens)
+      if self.config.data.train == 'ereverter/cnn_dailymail_extractive':
+        loss = self._forward_pass_diffusion(x0=x0, label_mask=label_mask)
+      else:
+        # Original text diffusion loss
+        loss = self._forward_pass_diffusion(x0=input_tokens)
     
     nlls = loss * attention_mask
     count = attention_mask.sum()
