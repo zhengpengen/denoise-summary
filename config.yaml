@@ -23,27 +23,35 @@ data:
 
 # --- Model Architecture ---
 model:
+  # for dit
+  dim: 768                # Increased from 512
+  num_layers: 12          # Increased from 8 (Go to 24 for "Large")
+  num_heads: 12           # Increased from 8
+  dim_feedforward: 3072   # Standard 4x scaling (4 * 768)
   # Embedding dimension for sentences and the model's hidden size
-  dim: 384
-  num_layers: 6
-  num_heads: 6
+  # dim: 384
+  # num_layers: 6
+  # num_heads: 6
+  
   # dim: 512
   # num_layers: 8
   # num_heads: 8
-  dropout: 0.1
+  
   # Dimension of the feedforward network model in nn.TransformerEncoderLayer
-  dim_feedforward: 1536 # 4 * dim
+  # dim_feedforward: 1536 # 4 * dim
+  
   activation: 'gelu'
+  dropout: 0.1
 
 eval:
   checkpoint_path: "/home/michael/denoise-summary/outputs/2025.12.02/115122/best_model.pt"
 
 # --- Task-specific Settings ---
 summarization:
-  sentence_embedder_name_or_path: 'all-MiniLM-L6-v2'
-  sentence_embedding_dim: 384
-  # sentence_embedder_name_or_path: 'all-mpnet-base-v2'
-  # sentence_embedding_dim: 768
+  # sentence_embedder_name_or_path: 'all-MiniLM-L6-v2'
+  # sentence_embedding_dim: 384
+  sentence_embedder_name_or_path: 'all-mpnet-base-v2'
+  sentence_embedding_dim: 768
   # Max sentences per document. Documents with more will be truncated.
   max_sentences: 100
 
@@ -70,12 +78,12 @@ optim:
 trainer:
   accelerator: 'gpu'
   devices: 1
-  gradient_clip_val: 0.5
+  gradient_clip_val: 1.0
   # Total training steps. Number of epochs will be calculated from this.
   max_steps: 50000
   # Run validation every N training steps
   # Log every N steps
-  log_every_n_steps: 50
+  log_every_n_steps: 100
   # Path to a checkpoint file to resume training from. If null, starts fresh.
   resume_from_checkpoint: null
 

@@ -1,5 +1,6 @@
 import os
 import math
+import sys
 import torch
 import torch.nn.functional as F
 from tqdm.auto import tqdm
@@ -13,7 +14,8 @@ from transformers import get_linear_schedule_with_warmup
 
 # Your project's imports
 from dataloader import get_summarization_dataloaders
-from summarization_model import SummarizationDenoiser
+# from summarization_model import SummarizationDenoiser
+from dit_model import SummarizationDenoiser
 import utils
 
 # --- 1. Diffusion-related components (Noise Scheduler) ---
