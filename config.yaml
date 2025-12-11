@@ -24,34 +24,35 @@ data:
 # --- Model Architecture ---
 model:
   # for dit
-  dim: 768                # Increased from 512
-  num_layers: 12          # Increased from 8 (Go to 24 for "Large")
-  num_heads: 12           # Increased from 8
-  dim_feedforward: 3072   # Standard 4x scaling (4 * 768)
+  # dim: 768                # Increased from 512
+  # num_layers: 12          # Increased from 8 (Go to 24 for "Large")
+  # num_heads: 12           # Increased from 8
+  # dim_feedforward: 3072   # Standard 4x scaling (4 * 768)
   # Embedding dimension for sentences and the model's hidden size
-  # dim: 384
-  # num_layers: 6
-  # num_heads: 6
+  dim: 384
+  num_layers: 6
+  num_heads: 6
   
   # dim: 512
   # num_layers: 8
   # num_heads: 8
   
   # Dimension of the feedforward network model in nn.TransformerEncoderLayer
-  # dim_feedforward: 1536 # 4 * dim
+  dim_feedforward: 1536 # 4 * dim
+  # dim_feedforward: 2048
   
   activation: 'gelu'
   dropout: 0.1
 
 eval:
-  checkpoint_path: "/home/michael/denoise-summary/outputs/2025.12.02/115122/best_model.pt"
+  checkpoint_path: "/home/michael/denoise-summary/outputs/2025.12.01/082613/best_model.pt"
 
 # --- Task-specific Settings ---
 summarization:
-  # sentence_embedder_name_or_path: 'all-MiniLM-L6-v2'
-  # sentence_embedding_dim: 384
-  sentence_embedder_name_or_path: 'all-mpnet-base-v2'
-  sentence_embedding_dim: 768
+  sentence_embedder_name_or_path: 'all-MiniLM-L6-v2'
+  sentence_embedding_dim: 384
+  # sentence_embedder_name_or_path: 'all-mpnet-base-v2'
+  # sentence_embedding_dim: 768
   # Max sentences per document. Documents with more will be truncated.
   max_sentences: 100
 
@@ -92,6 +93,7 @@ wandb:
   project: "denoise-summary"
   entity: zhengpengen # Your wandb username or team name
   mode: "online" # "online", "offline", or "disabled"
+  notes: "DiT model but decreased size"
 
 # --- Hydra Settings ---
 hydra:
